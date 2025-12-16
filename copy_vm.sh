@@ -1,19 +1,3 @@
-Skip to content
- 
-Search Gists
-Search...
-All gists
-Back to GitHub
-@cliveg
-cliveg/copyVM.sh
-Created last year • Report abuse
-Code
-Revisions
-1
-Clone this repository at &lt;script src=&quot;https://gist.github.com/cliveg/57795064103b5068b7fb28575c68b946.js&quot;&gt;&lt;/script&gt;
-<script src="https://gist.github.com/cliveg/57795064103b5068b7fb28575c68b946.js"></script>
-Copies azure VMs using disk snapshots between subscriptions
-copyVM.sh
 #!/bin/bash
 
 # Define color codes
@@ -297,20 +281,3 @@ echo .
 echo " -> Enabling VM Diagnostics"
 az vm boot-diagnostics enable --resource-group $destinationResourceGroup --subscription $destinationSubscription --name $vmName
 echo "Complete."
-@albergeorgy
-Comment
- 
-Leave a comment
- 
-Footer
-© 2025 GitHub, Inc.
-Footer navigation
-Terms
-Privacy
-Security
-Status
-Community
-Docs
-Contact
-Manage cookies
-Do not share my personal information
