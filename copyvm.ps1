@@ -668,13 +668,9 @@ function New-VMConfiguration {
         $vnet = Get-AzVirtualNetwork -Name $VNetName -ResourceGroupName $ResourceGroupName
         $subnet = Get-AzVirtualNetworkSubnetConfig -Name $SubnetName -VirtualNetwork $vnet
         
-        # Create public IP (dynamic allocation with Basic SKU)
-        $publicIPName = "$VMName-pip"
-        $publicIP = New-AzPublicIpAddress -Name $publicIPName -ResourceGroupName $ResourceGroupName -Location $Location -AllocationMethod Dynamic -Sku Basic
-        
-        # Create network interface
+        # Create network interface without public IP
         $nicName = "$VMName-nic"
-        $nic = New-AzNetworkInterface -Name $nicName -ResourceGroupName $ResourceGroupName -Location $Location -SubnetId $subnet.Id -PublicIpAddressId $publicIP.Id
+        $nic = New-AzNetworkInterface -Name $nicName -ResourceGroupName $ResourceGroupName -Location $Location -SubnetId $subnet.Id
         
         # Add NIC to VM configuration
         $vmConfig = Add-AzVMNetworkInterface -VM $vmConfig -Id $nic.Id -Primary
