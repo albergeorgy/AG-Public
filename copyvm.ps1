@@ -1,5 +1,4 @@
-# .\copyvm.ps1 -SourceSubscriptionId "xxxxx-xxxx-xxxxx-xxxx-xxx" -SourceResourceGroupName "xxxxxx" -SourceVMName "xxxxx" -DestinationSubscriptionId "xxxxx" -DestinationResourceGroupName "xxxx" -DestinationLocation "xxxxx" -DestinationVNetName "xxxxx" -DestinationSubnetName "xxxxx"
-
+# .\copyvm.ps1 -SourceSubscriptionId "xxxxx-xxxx-xxxxx-xxxx-xxx" -SourceResourceGroupName "xxxxxx" -SourceVMName "xxxxx" -DestinationSubscriptionId "xxxxx" -DestinationResourceGroupName "xxxx" -DestinationLocation "xxxxx" -DestinationVNetName "xxxxx" -DestinationSubnetName "xxxxx" -SourceVMName "WindowsVM"/-SourceOSType "Linux"
 #Requires -Modules Az.Accounts, Az.Compute, Az.Storage, Az.Resources
 <#
 .SYNOPSIS
@@ -109,6 +108,10 @@ param(
     
     [Parameter(Mandatory = $false)]
     [string]$DestinationTenantId,
+    
+    [Parameter(Mandatory = $false)]
+    [ValidateSet("Windows", "Linux")]
+    [string]$SourceOSType,
     
     [Parameter(Mandatory = $false)]
     [switch]$UseDirectCopy = $true
@@ -405,15 +408,16 @@ function Copy-VHDWithAzCopy {
             $env:PATH += ";$($azcopyExe.DirectoryName)"
         }
         
-        # Use AzCopy with basic compatible settings for single file copy
-        Write-Log "Starting AzCopy transfer with basic settings..."
-        # Basic settings for VHD file copy:
-        $copyCommand = "azcopy copy `"$SourceUrl`" `"$DestinationUrl`" --overwrite=true"
+        # Use AzCopy with enhanced progress reporting for single file copy
+        Write-Log "Starting AzCopy transfer with detailed progress reporting..."
+        # Enhanced settings for VHD file copy with progress tracking:
+        $copyCommand = "azcopy copy `"$SourceUrl`" `"$DestinationUrl`" --overwrite=true --output-level=default --log-level=INFO"
         
         Write-Log "Executing: $copyCommand"
+        Write-Log "Progress will show: Transfer speed, Percentage completed, Data transferred vs total size, Estimated time remaining"
         
-        # Capture both output and error streams
-        $output = & cmd /c "azcopy copy `"$SourceUrl`" `"$DestinationUrl`" --overwrite=true 2>&1"
+        # Capture both output and error streams with enhanced progress display
+        $output = & cmd /c "azcopy copy `"$SourceUrl`" `"$DestinationUrl`" --overwrite=true --output-level=default --log-level=INFO 2>&1"
         $exitCode = $LASTEXITCODE
         
         Write-Log "AzCopy output: $output"
@@ -732,6 +736,21 @@ try {
     Write-Log "  OS Disk Size: $($sourceVM.StorageProfile.OsDisk.DiskSizeGB) GB"
     Write-Log "  Data Disks: $($sourceVM.StorageProfile.DataDisks.Count)"
     
+    # Store and validate OS type for destination VM creation
+    if ($SourceOSType) {
+        # Use manually specified OS type
+        $sourceOSType = $SourceOSType
+        Write-Log "Using manually specified OS Type: '$sourceOSType'" -Level "Warning"
+    } else {
+        # Auto-detect from source VM
+        $sourceOSType = $sourceVM.StorageProfile.OsDisk.OsType
+        Write-Log "Auto-detected OS Type from source VM: '$sourceOSType'" -Level "Success"
+    }
+    
+    # Ensure OS type is a proper string
+    $sourceOSType = [string]$sourceOSType
+    Write-Log "DEBUG: Final OS Type for destination: '$sourceOSType' (Type: $($sourceOSType.GetType().Name))" -Level "Warning"
+    
     # Step 3: Create snapshots directly (skip intermediate storage for cross-tenant)
     Write-Log "=== STEP 3: Creating Snapshots for Cross-Tenant Transfer ===" -Level "Success"
     Write-Log "Using direct snapshot approach for cross-tenant compatibility..."
@@ -960,13 +979,31 @@ try {
             }
             
             # Set OS disk - following official Microsoft documentation pattern
-            Write-Output "Job: Attaching OS disk: $osDiskId with OS type: $sourceOsType"
-            if ($sourceOsType -eq "Windows") {
-                $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $osDiskId -CreateOption Attach -Windows -StorageAccountType Premium_LRS
-            } else {
-                $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $osDiskId -CreateOption Attach -Linux -StorageAccountType Premium_LRS
+            Write-Output "Job: Attaching OS disk: $osDiskId with OS type: '$sourceOsType'"
+            
+            # Ensure OS type is a string and handle safely
+            $osTypeString = [string]$sourceOsType
+            if ([string]::IsNullOrWhiteSpace($osTypeString)) {
+                Write-Error "Job: OS Type is null or empty - defaulting to Windows"
+                $osTypeString = "Windows"
             }
-            Write-Output "Job: OS disk attached successfully"
+            
+            $osTypeNormalized = $osTypeString.Trim()
+            Write-Output "Job: DEBUG - OS Type Normalized: '$osTypeNormalized' (Length: $($osTypeNormalized.Length))"
+            Write-Output "Job: DEBUG - OS Type comparison: Windows='$($osTypeNormalized -ieq 'Windows')', Linux='$($osTypeNormalized -ieq 'Linux')'"
+            
+            # Use case-insensitive comparison
+            if ($osTypeNormalized -ieq "Windows") {
+                Write-Output "Job: Setting OS disk as Windows"
+                $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $osDiskId -CreateOption Attach -Windows -StorageAccountType Premium_LRS
+            } elseif ($osTypeNormalized -ieq "Linux") {
+                Write-Output "Job: Setting OS disk as Linux"
+                $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $osDiskId -CreateOption Attach -Linux -StorageAccountType Premium_LRS
+            } else {
+                Write-Error "Job: Unknown OS Type: '$osTypeNormalized' - defaulting to Windows"
+                $vmConfig = Set-AzVMOSDisk -VM $vmConfig -ManagedDiskId $osDiskId -CreateOption Attach -Windows -StorageAccountType Premium_LRS
+            }
+            Write-Output "Job: OS disk attached successfully with OS type: $osTypeNormalized"
             
             # Add data disks if any
             foreach ($dataDiskInfo in $dataDisks) {
@@ -993,7 +1030,7 @@ try {
             Write-Error "Job: Stack trace: $($_.ScriptStackTrace)"
             throw
         }
-    } -ArgumentList $DestinationResourceGroupName, $DestinationLocation, $DestinationVMName, $DestinationVMSize, $DestinationAvailabilityZone, $osDisk.Id, @($dataDisks | ForEach-Object { @{ DiskId = $_.Disk.Id; Lun = $_.Lun; Caching = $_.Caching } }), $DestinationVNetName, $DestinationSubnetName, $sourceVM.StorageProfile.OsDisk.OsType
+    } -ArgumentList $DestinationResourceGroupName, $DestinationLocation, $DestinationVMName, $DestinationVMSize, $DestinationAvailabilityZone, $osDisk.Id, @($dataDisks | ForEach-Object { @{ DiskId = $_.Disk.Id; Lun = $_.Lun; Caching = $_.Caching } }), $DestinationVNetName, $DestinationSubnetName, $sourceOSType
     
     # Parallel checking: Monitor both job status AND VM existence
     Write-Log "Monitoring VM creation progress (checking every 30 seconds)..."
