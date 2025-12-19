@@ -1,4 +1,4 @@
-# .\copyvm.ps1 -SourceSubscriptionId "xxxxx-xxxx-xxxxx-xxxx-xxx" -SourceResourceGroupName "xxxxxx" -SourceVMName "xxxxx" -DestinationSubscriptionId "xxxxx" -DestinationResourceGroupName "xxxx" -DestinationLocation "xxxxx" -DestinationVNetName "xxxxx" -DestinationSubnetName "xxxxx" -SourceVMName "WindowsVM"/-SourceOSType "Linux"
+# .\copyvm.ps1 -SourceSubscriptionId "xxxxx-xxxx-xxxxx-xxxx-xxx" -SourceResourceGroupName "xxxxxx" -SourceVMName "xxxxx" -DestinationSubscriptionId "xxxxx" -DestinationResourceGroupName "xxxx" -DestinationLocation "xxxxx" -DestinationVNetName "xxxxx" -DestinationSubnetName "xxxxx" -SourceVMName "Windows"/-SourceOSType "Linux"
 #Requires -Modules Az.Accounts, Az.Compute, Az.Storage, Az.Resources
 <#
 .SYNOPSIS
